@@ -2110,7 +2110,9 @@
       finally { clearTimeout(to); }
       if (!CONFIG.online || this.gone) return;
       this.gone = true;
-      const data = encodeURIComponent(JSON.stringify({ p: this.props, g: this.general }));
+      const p = {};                                      // solo los valores (URL corta)
+      for (const [k, v] of Object.entries(this.props)) if (v && 'value' in v) p[k] = { value: v.value };
+      const data = encodeURIComponent(JSON.stringify({ p, g: this.general }));
       location.replace(`${this.url}#we=${data}`);
     },
     // en la copia publicada: aplica las opciones que le pasó el wallpaper local
