@@ -6,8 +6,26 @@
   <title>Olivia Rodrigo — Ultimate Eras</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Caveat:wght@500;700&family=DM+Serif+Display:ital@0;1&family=Homemade+Apple&family=Permanent+Marker&family=Rock+Salt&family=Special+Elite&family=VT323&display=swap" />
-  <link rel="stylesheet" href="style.css?v=2026.10.04c" />
+  <style>html.or-wait body { visibility: hidden; }</style>
+  <script>
+    // Dentro de Wallpaper Engine la copia local primero decide si salta a la copia publicada
+    // (con internet): hasta entonces no carga las fuentes ni muestra nada, así el salto es inmediato
+    (function () {
+      var F = 'https://fonts.googleapis.com/css2?family=Anton&family=Caveat:wght@500;700&family=DM+Serif+Display:ital@0;1&family=Homemade+Apple&family=Permanent+Marker&family=Rock+Salt&family=Special+Elite&family=VT323&display=swap';
+      if (location.protocol !== 'file:') { document.write('<link rel="stylesheet" href="' + F + '" />'); return; }
+      document.documentElement.className += ' or-wait';
+      window.__orShow = function () {
+        if (window.__orShown) return;
+        window.__orShown = 1;
+        var l = document.createElement('link');
+        var done = function () { document.documentElement.classList.remove('or-wait'); };
+        l.rel = 'stylesheet'; l.href = F; l.onload = l.onerror = done;
+        setTimeout(done, 1500);
+        document.head.appendChild(l);
+      };
+    })();
+  </script>
+  <link rel="stylesheet" href="style.css?v=2026.10.04d" />
 </head>
 <body data-era="sour">
 
@@ -258,6 +276,6 @@
   <div class="vignette" aria-hidden="true"></div>
   <div class="curtain" aria-hidden="true"></div>
 
-  <script src="script.js?v=2026.10.04c"></script>
+  <script src="script.js?v=2026.10.04d"></script>
 </body>
 </html>

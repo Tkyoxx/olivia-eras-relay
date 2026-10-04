@@ -2151,28 +2151,43 @@
   // las entrega a la página que abrió él). Sin internet se queda el local, completo pero sin videoclips.
   const Online = {
     url: 'https://tkyoxx.github.io/olivia-eras-relay/wallpaper/',
-    build: '2026.10.04c',                                   // igual que en index.html (?v=): cada versión se descarga nueva
+    build: '2026.10.04d',                                   // igual que en index.html (?v=): cada versión se descarga nueva
     hosted: location.protocol !== 'file:',
-    props: {}, general: {}, timer: 0, gone: false,
+    inWE: typeof window.wallpaperRegisterMediaPropertiesListener === 'function',
+    props: {}, general: {}, timer: 0, check: null, decided: false, gone: false, byChoice: false,
+    // copia local: la comprobación de internet arranca ya (y deja lista la conexión con GitHub)
+    start() {
+      if (this.hosted) return;
+      if (!this.inWE || navigator.onLine === false) return this.stay();   // navegador normal o sin red
+      const ctl = new AbortController();
+      later(4000, () => ctl.abort());
+      this.check = fetch(`${this.url}script.js?v=${this.build}`, { method: 'HEAD', mode: 'no-cors', cache: 'no-store', signal: ctl.signal })
+        .then(() => true, () => false);
+      later(2500, () => this.go());                      // por si Wallpaper Engine no manda opciones
+    },
+    wants() { return CONFIG.online && (CONFIG.videoSource === 'auto' || CONFIG.videoSource === 'youtube'); },
     remember(p, general) {
       if (this.hosted) return;
       Object.assign(general ? this.general : this.props, p);
-      if (!this.timer) this.timer = Promise.resolve().then(() => this.go());   // sin esperas: las opciones llegan juntas
+      if (general) return;
+      if (this.byChoice && this.wants()) { this.decided = this.byChoice = false; }   // activaste los videoclips
+      if (!this.timer) this.timer = Promise.resolve().then(() => this.go());     // las opciones llegan juntas
     },
     async go() {
       this.timer = 0;
-      if (this.gone || !CONFIG.online || !(CONFIG.videoSource === 'auto' || CONFIG.videoSource === 'youtube')) return;
-      if (navigator.onLine === false) return;
-      const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 6000);
-      try { await fetch(this.url + 'script.js', { method: 'HEAD', mode: 'no-cors', cache: 'no-store', signal: ctl.signal }); }
-      catch (_) { return; }                              // sin conexión: se queda la versión local
-      finally { clearTimeout(to); }
-      if (!CONFIG.online || this.gone) return;
+      if (this.decided || this.hosted) return;
+      if (!this.wants()) { this.byChoice = true; return this.stay(); }
+      this.decided = true;
+      if (!this.check || !(await this.check) || !this.wants()) return this.stay();   // sin conexión: versión local
       this.gone = true;
       const p = {};                                      // solo los valores (URL corta)
       for (const [k, v] of Object.entries(this.props)) if (v && 'value' in v) p[k] = { value: v.value };
-      const data = encodeURIComponent(JSON.stringify({ p, g: this.general }));   // incluye lo que llegó durante la comprobación
+      const data = encodeURIComponent(JSON.stringify({ p, g: this.general }));
       location.replace(`${this.url}?v=${this.build}#we=${data}`);
+    },
+    stay() {
+      this.decided = true;
+      if (window.__orShow) window.__orShow();            // fuentes y collage: se queda la versión local
     },
     // en la copia publicada: aplica las opciones que le pasó el wallpaper local
     restore() {
@@ -2187,6 +2202,7 @@
   };
 
   /* ───────────────────────── Init ───────────────────────── */
+  Online.start();
   // Vista previa en navegador: index.html?era=guts&q=eco&fps=30
   const qs = new URLSearchParams(location.search);
   if (ERAS[qs.get('era')]) CONFIG.eraMode = qs.get('era');
