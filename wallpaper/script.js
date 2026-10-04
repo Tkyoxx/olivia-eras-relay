@@ -1865,10 +1865,11 @@
       } else {
         const a = this.yt;
         a.poll();
-        if (Media.playing) a.play(); else a.pause();
-        // oculta el video mientras YouTube muestra su interfaz (pausa, carga, final, anuncio)
+        // oculta el video mientras YouTube muestra su interfaz (pausa, carga, final, anuncio).
+        // Primero se oculta y después se pausa: así nunca se alcanza a ver el botón de pausa
         const hide = !Media.playing || a.state() !== 1;
         this.screen.classList.toggle('yt-hide', hide);
+        if (Media.playing) a.play(); else a.pause();
         if (hide) this.label(Media.playing ? 'YT …' : '‖ PAUSE');
         const diff = target - a.time();
         if (a.buffering() && !force && Math.abs(diff) < 8) return;   // está cargando: esperar
@@ -1881,6 +1882,7 @@
         // (YouTube lo hace sin cortes; un salto lo deja en negro un instante mientras carga)
         if ((force || Math.abs(diff) > 1) && now - this.lastSeek > 3000) {
           a.setRate(1);
+          this.screen.classList.add('yt-hide');               // el salto recarga: se oculta antes
           a.seek(target + (Media.playing ? this.ytLead : 0));
           this.lastSeek = now;
           this.seekCheck = Media.playing;
@@ -1892,6 +1894,11 @@
         if (hide) return;
       }
       this.label();
+    },
+    // YouTube avisa cada cambio de estado: se oculta en ese mismo instante (sin esperar al
+    // siguiente sync), para que nunca se vea su interfaz de pausa, carga o final
+    onYtState(st) {
+      if (this.mode === 'yt') this.screen.classList.toggle('yt-hide', st !== 1 || !Media.playing);
     },
     drift() {
       if (this.mode === 'none') return null;
@@ -1930,7 +1937,7 @@
           playerVars: { mute: 1, controls: 0, disablekb: 1, fs: 0, rel: 0, iv_load_policy: 3, playsinline: 1 },
           events: {
             onReady: (ev) => { ev.target.mute(); resolve(); },
-            onStateChange: (ev) => { if (ev.data === 1 && this.cb) this.cb.playing(); },
+            onStateChange: (ev) => { VideoSync.onYtState(ev.data); if (ev.data === 1 && this.cb) this.cb.playing(); },
             onError: (ev) => { if (this.cb) this.cb.error(ev.data); },
           },
         });
@@ -1999,6 +2006,7 @@
       if (d.ev === 'ready') { this.ready = true; const q = this.queue; this.queue = []; q.forEach((m) => this.send(m)); }
       else if (d.ev === 'time' || d.ev === 'state') {
         this.t = d.t; this.tAt = performance.now(); this.st = d.state;
+        if (d.ev === 'state') VideoSync.onYtState(d.state);
         if (d.state === 1 && this.cb) this.cb.playing();
       }
       else if (d.ev === 'error' && this.cb) this.cb.error(d.code);
@@ -2121,6 +2129,7 @@
   // las entrega a la página que abrió él). Sin internet se queda el local, completo pero sin videoclips.
   const Online = {
     url: 'https://tkyoxx.github.io/olivia-eras-relay/wallpaper/',
+    build: '2026.10.04a',                                   // igual que en index.html (?v=): cada versión se descarga nueva
     hosted: location.protocol !== 'file:',
     props: {}, general: {}, timer: 0, gone: false,
     remember(p, general) {
@@ -2141,7 +2150,7 @@
       const p = {};                                      // solo los valores (URL corta)
       for (const [k, v] of Object.entries(this.props)) if (v && 'value' in v) p[k] = { value: v.value };
       const data = encodeURIComponent(JSON.stringify({ p, g: this.general }));
-      location.replace(`${this.url}#we=${data}`);
+      location.replace(`${this.url}?v=${this.build}#we=${data}`);
     },
     // en la copia publicada: aplica las opciones que le pasó el wallpaper local
     restore() {

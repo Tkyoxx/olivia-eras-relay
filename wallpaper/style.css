@@ -720,7 +720,7 @@ body.no-gl .vignette { display: block; }
 }
 #song-video { object-fit: cover; filter: saturate(1.12) contrast(1.05) brightness(.95); background: #000; }
 /* Interfaz de YouTube oculta:
-   · el reproductor es 120 px más alto que la pantalla → el video (16:9) queda centrado
+   · el reproductor es 140 px más alto que la pantalla → el video (16:9) queda centrado
      y la barra de título (arriba) y el logo (abajo) caen fuera del marco y se recortan
    · pointer-events: none → el mouse nunca hace aparecer controles
    · solo se muestra cuando ya está reproduciendo; en pausa, carga o final se oculta
@@ -728,15 +728,15 @@ body.no-gl .vignette { display: block; }
 .yt-box { overflow: hidden; visibility: visible; opacity: .01; display: none; }
 .screen.yt-on .yt-box { display: block; }
 .yt-box iframe {
-  position: absolute; left: 0; top: -60px;
-  width: 100%; height: calc(100% + 120px);
+  position: absolute; left: 0; top: -70px;
+  width: 100%; height: calc(100% + 140px);
   border: 0; display: block;
   pointer-events: none;
 }
 .screen.show-local #song-video,
 .screen.show-yt .yt-box { opacity: 1; visibility: visible; transition: opacity .8s ease; }
 .screen.show-yt .yt-box { transition: opacity .35s ease .12s; }
-.screen.show-yt.yt-hide .yt-box { opacity: 0; transition: opacity .25s ease; }
+.screen.show-yt.yt-hide .yt-box { opacity: 0; transition: none; }   /* ocultar es instantáneo */
 .screen.show-yt.yt-hide .screen__nosignal { display: flex; }
 .screen.show-song video#video { opacity: 0; }
 .screen.show-song .screen__nosignal { display: none; }
