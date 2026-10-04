@@ -311,12 +311,6 @@ body.q-ultra .screen__roll { display: block; will-change: transform; }
 .chan__title--sour { font-family: var(--f-grunge); font-size: 104px; }
 .chan__title--guts { font-family: var(--f-poster); font-size: 170px; letter-spacing: .04em; }
 .chan__title--pink { font-family: var(--f-script); font-size: 76px; padding: 18px 0 6px; }
-.chan__hint {
-  margin-top: 14px; padding: 5px 14px 4px;
-  font: 400 16px var(--f-type); letter-spacing: .08em;
-  color: var(--c-soft); background: rgba(0,0,0,.45);
-}
-.chan__hint em { font-style: normal; color: #fff; }
 
 .polaroid__cap {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -741,7 +735,7 @@ body.no-gl .vignette { display: block; }
 }
 .screen.show-local #song-video,
 .screen.show-yt .yt-box { opacity: 1; visibility: visible; transition: opacity .8s ease; }
-.screen.show-yt .yt-box { transition: opacity .7s ease .9s; }
+.screen.show-yt .yt-box { transition: opacity .35s ease .12s; }
 .screen.show-yt.yt-hide .yt-box { opacity: 0; transition: opacity .25s ease; }
 .screen.show-yt.yt-hide .screen__nosignal { display: flex; }
 .screen.show-song video#video { opacity: 0; }

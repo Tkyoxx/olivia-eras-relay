@@ -1739,7 +1739,7 @@
   const VideoSync = {
     screen: $('#screen'), local: $('#song-video'), src: $('#hud-src'), offEl: $('#sync-offset'),
     entry: null, mode: 'none', token: 0, yt: null, lastSeek: 0, failTimer: 0,
-    offsets: {}, ytLead: 0.8, seekCheck: false, acc: 0,
+    offsets: {}, ytLead: 0.8, startLag: 1.5, seekCheck: false, acc: 0,
     init() {
       try { this.offsets = JSON.parse(localStorage.getItem('or-offsets') || '{}'); } catch (_) { this.offsets = {}; }
       for (const b of $$('.sync__btn')) {
@@ -1803,12 +1803,18 @@
       this.yt = adapter;
       this.screen.classList.add('yt-on');
       this.label('YT …');
-      adapter.load(e.yt, Math.max(0, Media.position + this.offset), {
+      // se pide el video ya adelantado lo que YouTube tarda en arrancar (se aprende con cada canción):
+      // así el primer cuadro sale casi en su lugar y no hace falta un salto (que lo vuelve a cargar)
+      const t0 = performance.now();
+      adapter.load(e.yt, Math.max(0, Media.position + this.offset + (Media.playing ? this.startLag : 0)), {
         playing: () => {
           if (token !== this.token || this.mode === 'yt') return;
           clearTimeout(this.failTimer);
+          const lag = (performance.now() - t0) / 1000;
+          if (lag < 8) this.startLag = clamp(this.startLag * 0.6 + lag * 0.4, 0.5, 4);   // sin contar anuncios
           this.setMode('yt');
-          this.sync(true);
+          this.lastSeek = performance.now();
+          this.sync(false);
         },
         error: (code) => { if (token === this.token) this.fail(adapter, code); },
       });
@@ -1897,7 +1903,7 @@
   // YouTube directo (IFrame API). Puede fallar con "error 153" porque los wallpapers
   // se cargan como archivo local (sin "referrer"); en ese caso se usa el relay o el MP4.
   const YTDirect = {
-    api: null, player: null, cb: null,
+    api: null, ready: null, player: null, cb: null,
     // Comprobado dentro de Wallpaper Engine: como archivo local (file://) YouTube no
     // reproduce (error 153, sin "referrer"). No se intenta: ahorra un iframe pesado e inútil.
     broken: location.protocol === 'file:',
@@ -1913,23 +1919,45 @@
       });
       return this.api;
     },
-    load(id, start, cb) {
-      this.cb = cb;
-      this.loadApi().then(() => {
-        this.rate = 1;
-        if (this.player && this.player.loadVideoById) { this.player.setPlaybackRate(1); this.player.loadVideoById({ videoId: id, startSeconds: start }); return; }
+    // reproductor vacío: el iframe de YouTube (lo más lento, ~1,4 s) se carga una sola vez
+    // y después cada canción solo pide su video
+    create() {
+      if (this.ready) return this.ready;
+      this.ready = this.loadApi().then(() => new Promise((resolve) => {
         const host = document.createElement('div');
         $('#yt-box').replaceChildren(host);
         this.player = new window.YT.Player(host, {
-          videoId: id,
-          playerVars: { autoplay: 1, mute: 1, controls: 0, disablekb: 1, fs: 0, rel: 0, iv_load_policy: 3, playsinline: 1, start: Math.floor(start) },
+          playerVars: { mute: 1, controls: 0, disablekb: 1, fs: 0, rel: 0, iv_load_policy: 3, playsinline: 1 },
           events: {
-            onReady: (ev) => { ev.target.mute(); ev.target.playVideo(); },
+            onReady: (ev) => { ev.target.mute(); resolve(); },
             onStateChange: (ev) => { if (ev.data === 1 && this.cb) this.cb.playing(); },
             onError: (ev) => { if (this.cb) this.cb.error(ev.data); },
           },
         });
-      }).catch(() => { if (this.cb) this.cb.error('api'); });
+      }));
+      this.ready.catch(() => { this.api = null; this.ready = null; });   // sin conexión: se reintenta luego
+      return this.ready;
+    },
+    // con internet, YouTube se prepara apenas termina la intro: cuando suene Olivia
+    // solo falta pedir el video
+    warm() {
+      if (this.ready || this.broken) return;
+      for (const h of ['https://www.youtube.com', 'https://i.ytimg.com', 'https://www.google.com']) {
+        const l = document.createElement('link');
+        l.rel = 'preconnect'; l.href = h; l.crossOrigin = '';
+        document.head.append(l);
+      }
+      this.create().catch(() => {});
+    },
+    load(id, start, cb) {
+      this.cb = cb;
+      this.rate = 1;
+      this.create().then(() => {
+        if (this.cb !== cb) return;                        // ya cambió la canción
+        this.player.mute();
+        this.player.setPlaybackRate(1);
+        this.player.loadVideoById({ videoId: id, startSeconds: start });
+      }).catch(() => { if (this.cb === cb) cb.error('api'); });
     },
     ok() { return this.player && typeof this.player.getCurrentTime === 'function'; },
     time() { return this.ok() ? this.player.getCurrentTime() : 0; },
@@ -2162,6 +2190,8 @@
   // al terminar la intro se quita la animación: si no, Chrome deja esas piezas
   // (y todo lo que tienen encima) como capas de GPU extra para siempre
   setTimeout(() => { for (const el of $$('.drop-in')) el.classList.remove('drop-in'); }, 3200);
+  // copia publicada (con internet): YouTube listo de antemano
+  setTimeout(() => { if (Online.hosted && CONFIG.online && /auto|youtube/.test(CONFIG.videoSource)) YTDirect.warm(); }, 2500);
 
   addEventListener('resize', () => { Stage.fit(); Renderer.resize(); });
   document.addEventListener('visibilitychange', () => { Clock.setPaused(document.hidden); Video.setPaused(document.hidden); });
