@@ -65,6 +65,14 @@
   const rand = (a, b) => a + Math.random() * (b - a);
   const pick = (arr) => arr[(Math.random() * arr.length) | 0];
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  // temporizador sobre requestAnimationFrame: dentro de Wallpaper Engine setTimeout se atrasa segundos
+  const later = (ms, fn) => {
+    const h = { off: false }, end = performance.now() + ms;
+    const f = (now) => { if (h.off) return; if (now >= end) fn(); else requestAnimationFrame(f); };
+    requestAnimationFrame(f);
+    return h;
+  };
+  const cancel = (h) => { if (h) h.off = true; };
   const pad2 = (n) => String(n).padStart(2, '0');
   const TAU = Math.PI * 2;
   const wave = (t, period, phase = 0) => 0.5 - 0.5 * Math.cos(TAU * (t / period + phase));   // 0→1→0 suave
@@ -1905,8 +1913,8 @@
       if (st === 1 && this.ytFresh) {
         this.ytFresh = false;
         this.revealAt = performance.now() + 3600;   // YouTube los esconde a los ~3 s: margen
-        clearTimeout(this.revealT);
-        this.revealT = setTimeout(() => this.applyHide(), 3650);
+        cancel(this.revealT);
+        this.revealT = later(3650, () => this.applyHide());
       }
       this.applyHide(st);
     },
@@ -2143,16 +2151,16 @@
   // las entrega a la página que abrió él). Sin internet se queda el local, completo pero sin videoclips.
   const Online = {
     url: 'https://tkyoxx.github.io/olivia-eras-relay/wallpaper/',
-    build: '2026.10.04b',                                   // igual que en index.html (?v=): cada versión se descarga nueva
+    build: '2026.10.04c',                                   // igual que en index.html (?v=): cada versión se descarga nueva
     hosted: location.protocol !== 'file:',
     props: {}, general: {}, timer: 0, gone: false,
     remember(p, general) {
       if (this.hosted) return;
       Object.assign(general ? this.general : this.props, p);
-      clearTimeout(this.timer);
-      this.timer = setTimeout(() => this.go(), 250);     // Wallpaper Engine manda todas las opciones juntas
+      if (!this.timer) this.timer = Promise.resolve().then(() => this.go());   // sin esperas: las opciones llegan juntas
     },
     async go() {
+      this.timer = 0;
       if (this.gone || !CONFIG.online || !(CONFIG.videoSource === 'auto' || CONFIG.videoSource === 'youtube')) return;
       if (navigator.onLine === false) return;
       const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 6000);
@@ -2163,7 +2171,7 @@
       this.gone = true;
       const p = {};                                      // solo los valores (URL corta)
       for (const [k, v] of Object.entries(this.props)) if (v && 'value' in v) p[k] = { value: v.value };
-      const data = encodeURIComponent(JSON.stringify({ p, g: this.general }));
+      const data = encodeURIComponent(JSON.stringify({ p, g: this.general }));   // incluye lo que llegó durante la comprobación
       location.replace(`${this.url}?v=${this.build}#we=${data}`);
     },
     // en la copia publicada: aplica las opciones que le pasó el wallpaper local
@@ -2209,12 +2217,12 @@
   Clock.start();
   Video.updateLock();
   // bienvenida: cuando el collage termina de "caer", se anuncia la era actual
-  setTimeout(() => EraFX.announce(Era.current, null, true), 1900);
+  later(1900, () => EraFX.announce(Era.current, null, true));
   // al terminar la intro se quita la animación: si no, Chrome deja esas piezas
   // (y todo lo que tienen encima) como capas de GPU extra para siempre
-  setTimeout(() => { for (const el of $$('.drop-in')) el.classList.remove('drop-in'); }, 3200);
+  later(3200, () => { for (const el of $$('.drop-in')) el.classList.remove('drop-in'); });
   // copia publicada (con internet): YouTube listo de antemano
-  setTimeout(() => { if (Online.hosted && CONFIG.online && /auto|youtube/.test(CONFIG.videoSource)) YTDirect.warm(); }, 2500);
+  later(2500, () => { if (Online.hosted && CONFIG.online && /auto|youtube/.test(CONFIG.videoSource)) YTDirect.warm(); });
 
   addEventListener('resize', () => { Stage.fit(); Renderer.resize(); });
   document.addEventListener('visibilitychange', () => { Clock.setPaused(document.hidden); Video.setPaused(document.hidden); });
