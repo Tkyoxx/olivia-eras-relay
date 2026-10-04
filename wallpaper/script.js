@@ -1643,29 +1643,18 @@
       if (typeof w.wallpaperRegisterMediaStatusListener === 'function') {
         w.wallpaperRegisterMediaStatusListener((e) => { this.enabled = e.enabled; if (!e.enabled) this.clear(); });
       }
-      this.register();
-      this.registerArt();
-      // En la copia publicada Wallpaper Engine responde al registrarse (canción, pausa, segundo)
-      // pero no avisa los cambios: se le pregunta cada segundo. Cada respuesta repetida no hace nada
-      if (Online.hosted) this.poll();
-    },
-    // funciones nuevas en cada registro: si es la misma, Wallpaper Engine lo ignora y no responde
-    register() {
-      const w = window;
+      // Una sola vez: Wallpaper Engine avisa cada cambio por su cuenta (también en la copia
+      // publicada). Registrar de nuevo mientras está avisando hace caer la página: nunca se repite
       w.wallpaperRegisterMediaPropertiesListener((e) => this.onProps(e));
       w.wallpaperRegisterMediaPlaybackListener((e) => this.onPlayback(e.state));
       w.wallpaperRegisterMediaTimelineListener((e) => this.onTimeline(e));
+      w.wallpaperRegisterMediaThumbnailListener((e) => Song.setArt(e.thumbnail));
     },
-    registerArt() {
-      window.wallpaperRegisterMediaThumbnailListener((e) => Song.setArt(e.thumbnail));
-    },
-    poll() { later(1000, () => { this.register(); this.poll(); }); },   // con rAF: si WE pausa, se pausa
     onProps(e) {
       const key = `${e.title}|${e.artist}`;
       if (key === this.key) return;
       this.key = key;
       this.synced = false;                               // la primera posición de la canción nueva se toma tal cual
-      if (Online.hosted) this.registerArt();             // portada de la canción nueva
       this.title = e.title || ''; this.artist = e.artist || ''; this.album = e.albumTitle || '';
       this.pos = 0; this.posAt = performance.now(); this.hasTimeline = false;
       Song.onTrack();
@@ -1673,7 +1662,7 @@
     onPlayback(state) {
       const M = window.wallpaperMediaIntegration || {};
       const PLAYING = M.PLAYBACK_PLAYING ?? 1, STOPPED = M.PLAYBACK_STOPPED ?? 0;
-      if (state === this.state) return;                  // sin cambios (respuesta repetida)
+      if (state === this.state) return;                  // sin cambios (Wallpaper Engine repite avisos)
       this.state = state;
       this.pos = this.position; this.posAt = performance.now();
       this.playing = state === PLAYING;
@@ -2183,7 +2172,7 @@
   // las entrega a la página que abrió él). Sin internet se queda el local, completo pero sin videoclips.
   const Online = {
     url: 'https://tkyoxx.github.io/olivia-eras-relay/wallpaper/',
-    build: '2026.10.04g',                                   // igual que en index.html (?v=): cada versión se descarga nueva
+    build: '2026.10.04h',                                   // igual que en index.html (?v=): cada versión se descarga nueva
     hosted: location.protocol !== 'file:',
     inWE: typeof window.wallpaperRegisterMediaPropertiesListener === 'function',
     props: {}, general: {}, timer: 0, check: null, decided: false, gone: false, byChoice: false,
