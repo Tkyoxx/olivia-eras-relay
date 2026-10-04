@@ -5,7 +5,7 @@
   (abierto como archivo local, YouTube responde "error 153").
 
   Solo controla un reproductor de YouTube silenciado: recibe órdenes del wallpaper
-  (cargar / buscar / play / pausa / consultar / liberar) y le responde el estado.
+  (cargar / buscar / play / pausa / velocidad / consultar / liberar) y le responde el estado.
   Sin temporizadores: todo es por eventos, así que en reposo no gasta CPU.
 -->
 <html lang="es">
@@ -69,6 +69,7 @@
       else if (d.cmd === 'play') player.playVideo();
       else if (d.cmd === 'pause') player.pauseVideo();
       else if (d.cmd === 'stop') player.stopVideo();
+      else if (d.cmd === 'rate') player.setPlaybackRate(Math.min(2, Math.max(0.25, +d.r || 1)));
     }
 
     // eslint-disable-next-line no-unused-vars

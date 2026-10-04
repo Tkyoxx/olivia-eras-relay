@@ -1739,7 +1739,7 @@
   const VideoSync = {
     screen: $('#screen'), local: $('#song-video'), src: $('#hud-src'), offEl: $('#sync-offset'),
     entry: null, mode: 'none', token: 0, yt: null, lastSeek: 0, failTimer: 0,
-    offsets: {}, ytLead: 0.8, seekCheck: false, acc: 0, refine: 0,
+    offsets: {}, ytLead: 0.8, seekCheck: false, acc: 0,
     init() {
       try { this.offsets = JSON.parse(localStorage.getItem('or-offsets') || '{}'); } catch (_) { this.offsets = {}; }
       for (const b of $$('.sync__btn')) {
@@ -1871,13 +1871,17 @@
           this.ytLead = clamp(this.ytLead + diff * 0.35, 0, 3);
           this.seekCheck = false;
         }
-        // tras un salto grande se permiten 2 ajustes finos (> 0,25 s); después solo si se aleja > 0,6 s
-        const big = force || Math.abs(diff) > 0.6;
-        if ((big || (this.refine > 0 && Math.abs(diff) > 0.25)) && now - this.lastSeek > 3000) {
-          this.refine = big ? 2 : this.refine - 1;
+        // desfase grande (> 1 s): salto. Desfase chico: se acelera o frena el video un 5-10 %
+        // (YouTube lo hace sin cortes; un salto lo deja en negro un instante mientras carga)
+        if ((force || Math.abs(diff) > 1) && now - this.lastSeek > 3000) {
+          a.setRate(1);
           a.seek(target + (Media.playing ? this.ytLead : 0));
           this.lastSeek = now;
           this.seekCheck = Media.playing;
+        } else if (a.state() === 1 && now - this.lastSeek > 1500) {
+          const ad = Math.abs(diff);
+          const r = ad < 0.06 ? 1 : ad < 0.15 ? a.rate : 1 + Math.sign(diff) * (ad > 0.4 ? 0.1 : 0.05);
+          a.setRate(r);
         }
         if (hide) return;
       }
@@ -1912,7 +1916,8 @@
     load(id, start, cb) {
       this.cb = cb;
       this.loadApi().then(() => {
-        if (this.player && this.player.loadVideoById) { this.player.loadVideoById({ videoId: id, startSeconds: start }); return; }
+        this.rate = 1;
+        if (this.player && this.player.loadVideoById) { this.player.setPlaybackRate(1); this.player.loadVideoById({ videoId: id, startSeconds: start }); return; }
         const host = document.createElement('div');
         $('#yt-box').replaceChildren(host);
         this.player = new window.YT.Player(host, {
@@ -1934,7 +1939,9 @@
     play() { if (this.ok() && this.player.getPlayerState() !== 1) this.player.playVideo(); },
     pause() { if (this.ok() && this.player.getPlayerState() === 1) this.player.pauseVideo(); },
     poll() {},
-    stop() { this.cb = null; if (this.ok()) this.player.stopVideo(); },
+    rate: 1,
+    setRate(r) { if (r !== this.rate && this.ok()) { this.rate = r; this.player.setPlaybackRate(r); } },
+    stop() { this.cb = null; this.rate = 1; if (this.ok()) this.player.stopVideo(); },
   };
 
   // YouTube a través de una página "relay" alojada en https (GitHub Pages):
@@ -1970,6 +1977,8 @@
     },
     load(id, start, cb) { this.cb = cb; this.st = -1; this.ensure(); this.send({ cmd: 'load', id, start }); },
     poll() { this.send({ cmd: 'poll' }); },
+    rate: 1,
+    setRate(r) { if (r !== this.rate) { this.rate = r; this.send({ cmd: 'rate', r }); } },
     time() { return this.t + (this.st === 1 ? (performance.now() - this.tAt) / 1000 : 0); },
     seek(t) { this.send({ cmd: 'seek', t }); this.t = t; this.tAt = performance.now(); },
     state() { return this.st; },
@@ -1977,7 +1986,7 @@
     play() { if (this.st !== 1) this.send({ cmd: 'play' }); },
     pause() { if (this.st === 1) this.send({ cmd: 'pause' }); },
     stop() {
-      this.cb = null; this.st = -1;
+      this.cb = null; this.st = -1; this.rate = 1;
       if (!this.frame) return;
       this.send({ cmd: 'stop' });
       clearTimeout(this.idle);
