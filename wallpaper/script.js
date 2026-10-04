@@ -1634,7 +1634,7 @@
   const Media = {
     enabled: true, key: '',
     title: '', artist: '', album: '',
-    playing: false, pos: 0, posAt: 0, dur: 0, hasTimeline: false,
+    playing: false, pos: 0, posAt: 0, dur: 0, hasTimeline: false, state: null, synced: false,
     get position() { return this.pos + (this.playing ? (performance.now() - this.posAt) / 1000 : 0); },
     init() {
       const w = window;
@@ -1643,15 +1643,28 @@
       if (typeof w.wallpaperRegisterMediaStatusListener === 'function') {
         w.wallpaperRegisterMediaStatusListener((e) => { this.enabled = e.enabled; if (!e.enabled) this.clear(); });
       }
-      w.wallpaperRegisterMediaPropertiesListener((e) => this.onProps(e));
-      w.wallpaperRegisterMediaPlaybackListener((e) => this.onPlayback(e.state));
-      w.wallpaperRegisterMediaTimelineListener((e) => this.onTimeline(e));
-      w.wallpaperRegisterMediaThumbnailListener((e) => Song.setArt(e.thumbnail));
+      this.register();
+      this.registerArt();
+      // En la copia publicada Wallpaper Engine responde al registrarse (canción, pausa, segundo)
+      // pero no avisa los cambios: se le pregunta cada segundo. Cada respuesta repetida no hace nada
+      if (Online.hosted) this.poll();
     },
+    register() {
+      const w = window;
+      w.wallpaperRegisterMediaPropertiesListener(this.hProps || (this.hProps = (e) => this.onProps(e)));
+      w.wallpaperRegisterMediaPlaybackListener(this.hPlay || (this.hPlay = (e) => this.onPlayback(e.state)));
+      w.wallpaperRegisterMediaTimelineListener(this.hTime || (this.hTime = (e) => this.onTimeline(e)));
+    },
+    registerArt() {
+      window.wallpaperRegisterMediaThumbnailListener(this.hArt || (this.hArt = (e) => Song.setArt(e.thumbnail)));
+    },
+    poll() { later(1000, () => { this.register(); this.poll(); }); },   // con rAF: si WE pausa, se pausa
     onProps(e) {
       const key = `${e.title}|${e.artist}`;
       if (key === this.key) return;
       this.key = key;
+      this.synced = false;                               // la primera posición de la canción nueva se toma tal cual
+      if (Online.hosted) this.registerArt();             // portada de la canción nueva
       this.title = e.title || ''; this.artist = e.artist || ''; this.album = e.albumTitle || '';
       this.pos = 0; this.posAt = performance.now(); this.hasTimeline = false;
       Song.onTrack();
@@ -1659,6 +1672,8 @@
     onPlayback(state) {
       const M = window.wallpaperMediaIntegration || {};
       const PLAYING = M.PLAYBACK_PLAYING ?? 1, STOPPED = M.PLAYBACK_STOPPED ?? 0;
+      if (state === this.state) return;                  // sin cambios (respuesta repetida)
+      this.state = state;
       this.pos = this.position; this.posAt = performance.now();
       this.playing = state === PLAYING;
       if (state === STOPPED) return this.clear();
@@ -1666,12 +1681,17 @@
     },
     onTimeline(e) {
       if (!(e.duration > 0)) return;
-      this.pos = e.position; this.posAt = performance.now(); this.dur = e.duration;
+      this.dur = e.duration;
       this.hasTimeline = true;
+      // WE da la posición en segundos enteros: si coincide con la que ya se calcula (±1,5 s) no se
+      // toca (evita tirones del video); si saltó (adelantaste o retrocediste la canción), se corrige
+      if (this.synced && Math.abs(e.position - this.position) < 1.5) return;
+      this.synced = true;
+      this.pos = e.position; this.posAt = performance.now();
       VideoSync.sync(true);
     },
     clear() {
-      this.key = ''; this.title = ''; this.playing = false;
+      this.key = ''; this.title = ''; this.playing = false; this.synced = false;
       Song.stop(); HUD.setPhone(null);
     },
     // Vista previa en navegador: index.html?sim=vampire&at=40 finge que Spotify suena
@@ -1736,6 +1756,8 @@
       VideoSync.unload();
     },
     setArt(b64) {
+      if (b64 === this.art) return;                      // misma portada: nada que hacer
+      this.art = b64;
       if (!b64) { this.cd.classList.remove('has-art'); return; }
       this.cdArt.src = b64.startsWith('data:') ? b64 : `data:image/png;base64,${b64}`;
       this.cd.classList.add('has-art');
@@ -2160,7 +2182,7 @@
   // las entrega a la página que abrió él). Sin internet se queda el local, completo pero sin videoclips.
   const Online = {
     url: 'https://tkyoxx.github.io/olivia-eras-relay/wallpaper/',
-    build: '2026.10.04e',                                   // igual que en index.html (?v=): cada versión se descarga nueva
+    build: '2026.10.04f',                                   // igual que en index.html (?v=): cada versión se descarga nueva
     hosted: location.protocol !== 'file:',
     inWE: typeof window.wallpaperRegisterMediaPropertiesListener === 'function',
     props: {}, general: {}, timer: 0, check: null, decided: false, gone: false, byChoice: false,
