@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<!--
+  YouTube relay para "Olivia Rodrigo · Ultimate Eras".
+  Vive en un sitio https (GitHub Pages) para que YouTube reciba un origen válido
+  (abierto como archivo local, YouTube responde "error 153").
+
+  Solo controla un reproductor de YouTube silenciado: recibe órdenes del wallpaper
+  (cargar / buscar / play / pausa / consultar / liberar) y le responde el estado.
+  Sin temporizadores: todo es por eventos, así que en reposo no gasta CPU.
+-->
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="referrer" content="strict-origin-when-cross-origin" />
+  <title>OR · YouTube relay</title>
+  <style>
+    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
+    #player, iframe { width: 100%; height: 100%; border: 0; display: block; }
+  </style>
+</head>
+<body>
+  <div id="player"></div>
+  <script>
+    const ID = /^[\w-]{11}$/;
+    let player = null, apiReady = false, apiLoading = false;
+    const queue = [];
+    const post = (msg) => parent.postMessage(Object.assign({ orRelay: 1 }, msg), '*');
+    const ok = () => player && typeof player.getCurrentTime === 'function';
+    const report = (ev) => { if (ok()) post({ ev, t: player.getCurrentTime(), state: player.getPlayerState() }); };
+
+    // la API de YouTube se descarga recién con el primer video (si nunca suena Olivia, no se carga nada)
+    function loadApi() {
+      if (apiLoading) return;
+      apiLoading = true;
+      const s = document.createElement('script');
+      s.src = 'https://www.youtube.com/iframe_api';
+      s.onerror = () => post({ ev: 'error', code: 'api' });
+      document.head.append(s);
+    }
+
+    function handle(d) {
+      if (d.cmd === 'load') {
+        if (!ID.test(d.id)) return post({ ev: 'error', code: 'id' });
+        const start = Math.max(0, +d.start || 0);
+        if (ok()) { player.loadVideoById({ videoId: d.id, startSeconds: start }); return; }
+        if (player) player.destroy();
+        const host = document.createElement('div');
+        document.getElementById('player').replaceChildren(host);
+        player = new YT.Player(host, {
+          videoId: d.id,
+          playerVars: { autoplay: 1, mute: 1, controls: 0, disablekb: 1, fs: 0, rel: 0, iv_load_policy: 3, playsinline: 1, start: Math.floor(start) },
+          events: {
+            onReady: (e) => { e.target.mute(); e.target.playVideo(); },
+            onStateChange: () => report('state'),
+            onError: (e) => post({ ev: 'error', code: e.data }),
+          },
+        });
+        return;
+      }
+      if (d.cmd === 'free') {              // el wallpaper ya no lo usa: libera el reproductor por completo
+        if (player) { try { player.destroy(); } catch (_) {} player = null; }
+        document.getElementById('player').replaceChildren();
+        return;
+      }
+      if (!ok()) return;
+      if (d.cmd === 'poll') report('time');
+      else if (d.cmd === 'seek') { player.seekTo(+d.t || 0, true); report('time'); }
+      else if (d.cmd === 'play') player.playVideo();
+      else if (d.cmd === 'pause') player.pauseVideo();
+      else if (d.cmd === 'stop') player.stopVideo();
+    }
+
+    // eslint-disable-next-line no-unused-vars
+    function onYouTubeIframeAPIReady() {
+      apiReady = true;
+      queue.splice(0).forEach(handle);
+    }
+
+    addEventListener('message', (e) => {
+      const d = e.data;
+      if (!d || d.or !== 1 || e.source !== parent) return;
+      if (apiReady || d.cmd !== 'load') { if (apiReady) handle(d); return; }
+      queue.length = 0;                    // solo importa el último video pedido
+      queue.push(d);
+      loadApi();
+    });
+
+    post({ ev: 'ready' });
+  </script>
+</body>
+</html>
