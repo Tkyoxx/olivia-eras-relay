@@ -1739,7 +1739,7 @@
   const VideoSync = {
     screen: $('#screen'), local: $('#song-video'), src: $('#hud-src'), offEl: $('#sync-offset'),
     entry: null, mode: 'none', token: 0, yt: null, lastSeek: 0, failTimer: 0,
-    offsets: {}, ytLead: 0.8, startLag: 1.5, seekCheck: false, acc: 0,
+    offsets: {}, ytLead: 0.8, startLag: 1.5, seekCheck: false, acc: 0, ytFresh: true, revealAt: 0, revealT: 0,
     init() {
       try { this.offsets = JSON.parse(localStorage.getItem('or-offsets') || '{}'); } catch (_) { this.offsets = {}; }
       for (const b of $$('.sync__btn')) {
@@ -1813,7 +1813,7 @@
           const lag = (performance.now() - t0) / 1000;
           if (lag < 8) this.startLag = clamp(this.startLag * 0.6 + lag * 0.4, 0.5, 4);   // sin contar anuncios
           this.setMode('yt');
-          this.lastSeek = performance.now();
+          this.lastSeek = 0;     // si arrancó lejos, se corrige ya: todavía está oculto (controles de YouTube)
           this.sync(false);
         },
         error: (code) => { if (token === this.token) this.fail(adapter, code); },
@@ -1867,7 +1867,7 @@
         a.poll();
         // oculta el video mientras YouTube muestra su interfaz (pausa, carga, final, anuncio).
         // Primero se oculta y después se pausa: así nunca se alcanza a ver el botón de pausa
-        const hide = !Media.playing || a.state() !== 1;
+        const hide = !Media.playing || a.state() !== 1 || now < this.revealAt;
         this.screen.classList.toggle('yt-hide', hide);
         if (Media.playing) a.play(); else a.pause();
         if (hide) this.label(Media.playing ? 'YT …' : '‖ PAUSE');
@@ -1897,8 +1897,22 @@
     },
     // YouTube avisa cada cambio de estado: se oculta en ese mismo instante (sin esperar al
     // siguiente sync), para que nunca se vea su interfaz de pausa, carga o final
+    // Además: cuando un video arranca, YouTube muestra ~3 s su botón de pausa central y luego
+    // lo esconde solo. El video ya corre (sincronizado) pero se muestra recién ahí
     onYtState(st) {
-      if (this.mode === 'yt') this.screen.classList.toggle('yt-hide', st !== 1 || !Media.playing);
+      // video nuevo, anuncio o final (tras una pausa YouTube no vuelve a mostrar sus controles)
+      if (st === -1 || st === 0 || st === 5) this.ytFresh = true;
+      if (st === 1 && this.ytFresh) {
+        this.ytFresh = false;
+        this.revealAt = performance.now() + 3600;   // YouTube los esconde a los ~3 s: margen
+        clearTimeout(this.revealT);
+        this.revealT = setTimeout(() => this.applyHide(), 3650);
+      }
+      this.applyHide(st);
+    },
+    applyHide(st = this.yt ? this.yt.state() : -1) {
+      if (this.mode !== 'yt') return;
+      this.screen.classList.toggle('yt-hide', st !== 1 || !Media.playing || performance.now() < this.revealAt);
     },
     drift() {
       if (this.mode === 'none') return null;
@@ -2129,7 +2143,7 @@
   // las entrega a la página que abrió él). Sin internet se queda el local, completo pero sin videoclips.
   const Online = {
     url: 'https://tkyoxx.github.io/olivia-eras-relay/wallpaper/',
-    build: '2026.10.04a',                                   // igual que en index.html (?v=): cada versión se descarga nueva
+    build: '2026.10.04b',                                   // igual que en index.html (?v=): cada versión se descarga nueva
     hosted: location.protocol !== 'file:',
     props: {}, general: {}, timer: 0, gone: false,
     remember(p, general) {

@@ -725,7 +725,7 @@ body.no-gl .vignette { display: block; }
    · pointer-events: none → el mouse nunca hace aparecer controles
    · solo se muestra cuando ya está reproduciendo; en pausa, carga o final se oculta
    · mientras carga queda casi transparente (YouTube no reproduce un iframe oculto) */
-.yt-box { overflow: hidden; visibility: visible; opacity: .01; display: none; }
+.yt-box { overflow: hidden; visibility: visible; opacity: .01; display: none; transition: none; }   /* desaparecer: al instante */
 .screen.yt-on .yt-box { display: block; }
 .yt-box iframe {
   position: absolute; left: 0; top: -70px;
