@@ -27,7 +27,7 @@
     const queue = [];
     const post = (msg) => parent.postMessage(Object.assign({ orRelay: 1 }, msg), '*');
     const ok = () => player && typeof player.getCurrentTime === 'function';
-    const report = (ev) => { if (ok()) post({ ev, t: player.getCurrentTime(), state: player.getPlayerState() }); };
+    const report = (ev) => { if (ok()) post({ ev, t: player.getCurrentTime(), d: player.getDuration(), state: player.getPlayerState() }); };
 
     // la API de YouTube se descarga recién con el primer video (si nunca suena Olivia, no se carga nada)
     function loadApi() {

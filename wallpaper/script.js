@@ -1747,7 +1747,7 @@
   const VideoSync = {
     screen: $('#screen'), local: $('#song-video'), src: $('#hud-src'), offEl: $('#sync-offset'),
     entry: null, mode: 'none', token: 0, yt: null, lastSeek: 0, failTimer: 0,
-    offsets: {}, ytLead: 0.8, startLag: 1.5, seekCheck: false, acc: 0, ytFresh: true, revealAt: 0, revealT: 0,
+    offsets: {}, ytLead: 0.8, startLag: 1.5, seekCheck: false, acc: 0, ytFresh: true, revealAt: 0, revealT: 0, ending: false,
     init() {
       try { this.offsets = JSON.parse(localStorage.getItem('or-offsets') || '{}'); } catch (_) { this.offsets = {}; }
       for (const b of $$('.sync__btn')) {
@@ -1842,6 +1842,7 @@
     },
     unload() {
       this.token++;
+      this.ending = false;
       clearTimeout(this.failTimer);
       this.entry = null;
       const v = this.local;
@@ -1875,10 +1876,16 @@
         a.poll();
         // oculta el video mientras YouTube muestra su interfaz (pausa, carga, final, anuncio).
         // Primero se oculta y después se pausa: así nunca se alcanza a ver el botón de pausa
-        const hide = !Media.playing || a.state() !== 1 || now < this.revealAt;
+        // final del videoclip: en sus últimos 20 s YouTube pone su pantalla final (otros videos,
+        // el canal…) y al terminar ofrece más. Ahí se pausa y queda el canal hasta la próxima canción
+        // (si retrocedes la canción en Spotify, el videoclip vuelve)
+        const dur = a.duration();
+        this.ending = dur > 30 ? target > dur - 22 : a.state() === 0;
+        const hide = this.ending || !Media.playing || a.state() !== 1 || now < this.revealAt;
         this.screen.classList.toggle('yt-hide', hide);
-        if (Media.playing) a.play(); else a.pause();
-        if (hide) this.label(Media.playing ? 'YT …' : '‖ PAUSE');
+        if (Media.playing && !this.ending) a.play(); else a.pause();
+        if (hide) this.label(this.ending ? 'STOP' : Media.playing ? 'YT …' : '‖ PAUSE');
+        if (this.ending) { a.setRate(1); return; }
         const diff = target - a.time();
         if (a.buffering() && !force && Math.abs(diff) < 8) return;   // está cargando: esperar
         // aprende cuánto tarda YouTube tras un salto (solo midiendo con el video ya andando, no cargando)
@@ -1920,7 +1927,7 @@
     },
     applyHide(st = this.yt ? this.yt.state() : -1) {
       if (this.mode !== 'yt') return;
-      this.screen.classList.toggle('yt-hide', st !== 1 || !Media.playing || performance.now() < this.revealAt);
+      this.screen.classList.toggle('yt-hide', this.ending || st !== 1 || !Media.playing || performance.now() < this.revealAt);
     },
     drift() {
       if (this.mode === 'none') return null;
@@ -1992,6 +1999,7 @@
     time() { return this.ok() ? this.player.getCurrentTime() : 0; },
     seek(t) { if (this.ok()) this.player.seekTo(t, true); },
     state() { return this.ok() ? this.player.getPlayerState() : -1; },
+    duration() { return this.ok() ? this.player.getDuration() || 0 : 0; },
     buffering() { return this.state() === 3; },
     play() { if (this.ok() && this.player.getPlayerState() !== 1) this.player.playVideo(); },
     pause() { if (this.ok() && this.player.getPlayerState() === 1) this.player.pauseVideo(); },
@@ -2027,13 +2035,14 @@
       if (!this.frame || ev.source !== this.frame.contentWindow || !d || d.orRelay !== 1) return;
       if (d.ev === 'ready') { this.ready = true; const q = this.queue; this.queue = []; q.forEach((m) => this.send(m)); }
       else if (d.ev === 'time' || d.ev === 'state') {
-        this.t = d.t; this.tAt = performance.now(); this.st = d.state;
+        this.t = d.t; this.tAt = performance.now(); this.st = d.state; this.dur = d.d || 0;
         if (d.ev === 'state') VideoSync.onYtState(d.state);
         if (d.state === 1 && this.cb) this.cb.playing();
       }
       else if (d.ev === 'error' && this.cb) this.cb.error(d.code);
     },
-    load(id, start, cb) { this.cb = cb; this.st = -1; this.ensure(); this.send({ cmd: 'load', id, start }); },
+    load(id, start, cb) { this.cb = cb; this.st = -1; this.dur = 0; this.ensure(); this.send({ cmd: 'load', id, start }); },
+    duration() { return this.dur || 0; },
     poll() { this.send({ cmd: 'poll' }); },
     rate: 1,
     setRate(r) { if (r !== this.rate) { this.rate = r; this.send({ cmd: 'rate', r }); } },
@@ -2151,7 +2160,7 @@
   // las entrega a la página que abrió él). Sin internet se queda el local, completo pero sin videoclips.
   const Online = {
     url: 'https://tkyoxx.github.io/olivia-eras-relay/wallpaper/',
-    build: '2026.10.04d',                                   // igual que en index.html (?v=): cada versión se descarga nueva
+    build: '2026.10.04e',                                   // igual que en index.html (?v=): cada versión se descarga nueva
     hosted: location.protocol !== 'file:',
     inWE: typeof window.wallpaperRegisterMediaPropertiesListener === 'function',
     props: {}, general: {}, timer: 0, check: null, decided: false, gone: false, byChoice: false,
