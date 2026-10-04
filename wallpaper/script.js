@@ -1649,14 +1649,15 @@
       // pero no avisa los cambios: se le pregunta cada segundo. Cada respuesta repetida no hace nada
       if (Online.hosted) this.poll();
     },
+    // funciones nuevas en cada registro: si es la misma, Wallpaper Engine lo ignora y no responde
     register() {
       const w = window;
-      w.wallpaperRegisterMediaPropertiesListener(this.hProps || (this.hProps = (e) => this.onProps(e)));
-      w.wallpaperRegisterMediaPlaybackListener(this.hPlay || (this.hPlay = (e) => this.onPlayback(e.state)));
-      w.wallpaperRegisterMediaTimelineListener(this.hTime || (this.hTime = (e) => this.onTimeline(e)));
+      w.wallpaperRegisterMediaPropertiesListener((e) => this.onProps(e));
+      w.wallpaperRegisterMediaPlaybackListener((e) => this.onPlayback(e.state));
+      w.wallpaperRegisterMediaTimelineListener((e) => this.onTimeline(e));
     },
     registerArt() {
-      window.wallpaperRegisterMediaThumbnailListener(this.hArt || (this.hArt = (e) => Song.setArt(e.thumbnail)));
+      window.wallpaperRegisterMediaThumbnailListener((e) => Song.setArt(e.thumbnail));
     },
     poll() { later(1000, () => { this.register(); this.poll(); }); },   // con rAF: si WE pausa, se pausa
     onProps(e) {
@@ -2182,7 +2183,7 @@
   // las entrega a la página que abrió él). Sin internet se queda el local, completo pero sin videoclips.
   const Online = {
     url: 'https://tkyoxx.github.io/olivia-eras-relay/wallpaper/',
-    build: '2026.10.04f',                                   // igual que en index.html (?v=): cada versión se descarga nueva
+    build: '2026.10.04g',                                   // igual que en index.html (?v=): cada versión se descarga nueva
     hosted: location.protocol !== 'file:',
     inWE: typeof window.wallpaperRegisterMediaPropertiesListener === 'function',
     props: {}, general: {}, timer: 0, check: null, decided: false, gone: false, byChoice: false,
